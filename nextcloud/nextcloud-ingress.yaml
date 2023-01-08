@@ -9,10 +9,10 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`nextcloud.local.zhora.online`)
+    - match: Host(`nextcloud.zhora.online`)
       kind: Rule
       services:
         - name: nextcloud
           port: 80
   tls:
-    secretName: local-pfefer-xyz-tls
+    secretName: local-zhora-online-tls
