@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heimdall-deployment        # < name of the deployment
+  namespace: default   # < namespace where place the deployment and pods
+  labels:
+    app: heimdall       # < label for tagging and reference
+spec:
+  replicas: 1           # < number of pods to deploy
+  selector:
+    matchLabels:
+      app: heimdall
+  strategy:
+    rollingUpdate:
+      maxSurge: 0       # < The number of pods that can be created above the desired amount of pods during an update
+      maxUnavailable: 1 # < The number of pods that can be unavailable during the update process
+    type: RollingUpdate # < New pods are added gradually, and old pods are terminated gradually
+  template:
+    metadata:
+      labels:
+        app: heimdall
+      annotations:
+        backup.velero.io/backup-volumes: longhorn-heimdall #include volume in velero backup         
+    spec:
+      volumes:
+      - name: longhorn-heimdall  # < linkname of the volume for the pvc
+        persistentVolumeClaim:
+          claimName: longhorn-heimdall-pvc # < pvc name we created in the previous yaml
+      containers:
+      - image: ghcr.io/linuxserver/heimdall # < the name of the docker image we will use
+        name: heimdall                      # < name of container
+        imagePullPolicy: Always             # < always use the latest image when creating container/pod
+        env:                                # < the environment variables required (see container documentation)
+        - name: PGID
+          value: "1000" # < group "user"
+        - name: PUID
+          value: "1000" # < user "docker"
+        - name: TZ
+          value: Europe/Warsaw
+        ports:                              # < the ports required (see container documentation)
+         - containerPort: 80
+           name: http-80
+           protocol: TCP
+         - containerPort: 443
+           name: https-443
+           protocol: TCP
+        volumeMounts:                       # < the volume mount in the container. Look at the relation volumelabel->pvc->pv
+         - mountPath: /config               # < mount location in the container
+           name: longhorn-heimdall               # < volumelabel configured earlier in the yaml file
+           subPath: config                  # < subfolder in the nfs share to be mounted
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: heimdall-service    # < name of the service
+  namespace: default       # < namespace where place the deployment and pods
+spec:
+  selector:
+    app: heimdall           # < reference to the deployment (connects with this deployment)
+  ports:
+    - name: http-80
+      protocol: TCP
+      port: 80
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: longhorn-heimdall-pvc        # < name of the persistent volume claim ("pvc'")
+  namespace: default       # < namespace where place the pvc
+spec:
+  storageClassName: longhorn 
+  accessModes:
+    - ReadWriteMany         # < Multiple pods can write to storage. Same value as pv
+  resources:
+    requests:
+      storage: 256Mi          # < How much data can the pvc claim from pv
+---
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: heimdall
+  namespace: default
+  annotations: 
+    kubernetes.io/ingress.class: traefik-external
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`heimdall.local.zhora.online`)
+      kind: Rule
+      services:
+        - name: heimdall-service
+          port: 80
+  tls:
+    secretName: local-zhora-online-tls

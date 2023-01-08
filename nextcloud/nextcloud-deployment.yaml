@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: nextcloud
+  namespace: nextcloud
+  labels:
+    app: nextcloud 
+spec:
+  replicas: 1
+  serviceName: nextcloud
+  selector:
+    matchLabels:
+      app: nextcloud 
+  template:
+    metadata:
+      labels:
+        app: nextcloud
+      annotations:
+        backup.velero.io/backup-volumes: nextcloud-storage
+    spec:
+      volumes:
+      - name: nextcloud-storage
+        persistentVolumeClaim: 
+          claimName: nextcloud-pvc
+      containers:
+        - image: nextcloud
+          name: nextcloud 
+          ports:
+            - containerPort: 80
+          env:
+            - name: PGID
+              value: "1000"
+            - name: PUID
+              value: "1000"
+            - name: REDIS_HOST
+              value: redis
+            - name: MYSQL_HOST
+              value: mariadb 
+            - name: MYSQL_DATABASE
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_DATABASE
+                  name: mariadb-secrets
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_PASSWORD
+                  name: mariadb-secrets
+            - name: MYSQL_USER
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_USER
+                  name: mariadb-secrets
+            - name: NEXTCLOUD_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  key: MYSQL_PASSWORD
+                  name: mariadb-secrets 
+            - name: NEXTCLOUD_ADMIN_USER
+              value: "admin"
+            - name: NEXTCLOUD_TRUSTED_DOMAINS 
+              value: nextcloud.local.zhora.online nextcloud.zhora.online
+#            - name: APACHE_DISABLE_REWRITE_IP
+#              value: "1"
+          volumeMounts:
+            - mountPath: /var/www/html
+              name: nextcloud-storage
